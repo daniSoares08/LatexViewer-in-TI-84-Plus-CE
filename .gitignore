@@ -1,0 +1,5 @@
+*.tex
+/obj/*
+viewer_pages.c
+*.exe
+.vscode
