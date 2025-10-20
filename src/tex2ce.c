@@ -1,7 +1,9 @@
 // tex2ce.c
-// Simples conversor LaTeX -> C pages[] markup
-// Uso: ./tex2ce arquivo.tex
-// Gera viewer_pages.c com const char *pages[].
+// Conversor simples LaTeX -> C (pages[]) com marcação leve para TI-84+ CE
+// Uso no PC:
+//   gcc tex2ce.c -o tex2ce
+//   ./tex2ce caminho/arquivo.tex
+// Gera viewer_pages.c com: const char *pages[] = { "...\n", "...", NULL };
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,271 +11,445 @@
 #include <ctype.h>
 
 #define OUTNAME "viewer_pages.c"
-#define LINEWIDTH 28   // chars por linha na calculadora (ajuste fino)
-#define MAXPAGECHARS 4096
+#define LINEWIDTH 28        // largura em caracteres para quebra de linha
+#define MAXPAGECHARS 8192
 
-// Helpers
+// ---------- utils ----------
 static void trim(char *s) {
-    int i = 0, j = (int)strlen(s)-1;
+    int i = 0, j = (int)strlen(s) - 1;
     while (i <= j && isspace((unsigned char)s[i])) i++;
     while (j >= i && isspace((unsigned char)s[j])) j--;
-    if (i==0 && j==(int)strlen(s)-1) return;
-    int k=0;
-    for (; i<=j; ++i) s[k++]=s[i];
-    s[k]='\0';
+    if (i == 0 && j == (int)strlen(s) - 1) return;
+    int k = 0;
+    for (; i <= j; ++i) s[k++] = s[i];
+    s[k] = '\0';
 }
 
 static void replace_all(char *s, const char *a, const char *b) {
-    char buf[8192];
-    char *p;
-    buf[0]=0;
-    while ((p = strstr(s, a))) {
-        *p = '\0';
-        strcat(buf, s);
-        strcat(buf, b);
-        strcpy(s, p + strlen(a));
+    if (!*a) return;
+    char buf[65536];
+    buf[0] = 0;
+    const char *p = s;
+    for (;;) {
+        const char *q = strstr(p, a);
+        if (!q) { strncat(buf, p, sizeof(buf)-strlen(buf)-1); break; }
+        strncat(buf, p, (size_t)(q - p));
+        strncat(buf, b, sizeof(buf)-strlen(buf)-1);
+        p = q + strlen(a);
     }
-    strcat(buf, s);
-    strcpy(s, buf);
+    strncpy(s, buf, 65536-1);
+    s[65536-1] = '\0';
 }
 
-// convert simple inline math to our markup
-// - converts ^{...} -> <sup>...</sup>, _{...} -> <sub>...</sub>
-// - \frac{a}{b} -> <frac>a|b</frac>
-// - $...$ -> inline (we unwrap)
-// - known commands \Theta -> Θ, greek letters \alpha -> α (subset)
-static void math_normalize(char *s) {
-    // unwrap $...$ occurrences (remove $)
-    char tmp[8192]; tmp[0]=0;
-    int i=0, j=0;
-    int in_math = 0;
-    while (s[i]) {
-        if (s[i]=='$') { in_math ^=1; i++; continue; }
-        tmp[j++] = s[i++];
+// Extrai {conteudo} respeitando chaves aninhadas; s[i]=='{'
+static int extract_braced(const char *s, int i, char *out, int outsz) {
+    int depth = 0, k = 0;
+    if (s[i] != '{') return i;
+    i++; depth = 1;
+    while (s[i] && depth > 0) {
+        if (s[i] == '{') { depth++; if (depth <= 1) { /*noop*/ } }
+        else if (s[i] == '}') { depth--; if (depth == 0) { i++; break; } }
+        if (depth > 0 && k < outsz - 1) out[k++] = s[i];
+        if (depth > 0) i++;
     }
-    tmp[j]=0; strcpy(s,tmp);
+    out[k] = 0;
+    return i;
+}
 
-    // replace \frac{a}{b} with <frac>a|b</frac> (simple, single level)
-    char *p = s;
-    char out[8192]; out[0]=0;
-    while ((p = strstr(p, "\\frac{"))) {
-        *p = '\0';
-        strcat(out, s);
-        // parse numerator
-        char *q = p + strlen("\\frac{");
-        char num[256]="", den[256]="";
-        int k=0, brace=1;
-        while (*q && brace>0) {
-            if (*q=='{') brace++;
-            else if (*q=='}') brace--;
-            if (brace>0) num[k++]=*q;
-            q++;
-        }
-        num[k]=0;
-        if (*q=='\0') break;
-        // expect /{den}
-        if (*q=='/') q++;
-        if (*q=='{') q++;
-        k=0; brace=1;
-        while (*q && brace>0) {
-            if (*q=='{') brace++;
-            else if (*q=='}') brace--;
-            if (brace>0) den[k++]=*q;
-            q++;
-        }
-        den[k]=0;
-        char fracbuf[512];
-        snprintf(fracbuf, sizeof(fracbuf), "<frac>%s|%s</frac>", num, den);
-        strcat(out, fracbuf);
-        strcpy(s, q); p = s;
-    }
-    if (out[0]) {
-        strcat(out, s);
-        strcpy(s, out);
-    }
-
-    // ^{...} and _{...}
-    // naive single-pass replace
-    char tmp2[8192]; tmp2[0]=0;
-    i=0; j=0;
-    while (s[i]) {
-        if (s[i]=='^' && s[i+1]=='{') {
-            i+=2;
-            char inside[128]; int k=0;
-            while (s[i] && !(s[i]=='}')) inside[k++]=s[i++]; inside[k]=0;
-            i++; // skip }
-            strcat(tmp2, "<sup>");
-            strcat(tmp2, inside);
-            strcat(tmp2, "</sup>");
-        } else if (s[i]=='_' && s[i+1]=='{') {
-            i+=2;
-            char inside[128]; int k=0;
-            while (s[i] && !(s[i]=='}')) inside[k++]=s[i++]; inside[k]=0;
-            i++;
-            strcat(tmp2, "<sub>");
-            strcat(tmp2, inside);
-            strcat(tmp2, "</sub>");
+// Remove \cmd{...} mantendo apenas o conteúdo dentro das chaves
+static void strip_cmd_braced(char *s, const char *cmd) {
+    char out[65536]; out[0] = 0;
+    const char *p = s;
+    char pattern[64];
+    snprintf(pattern, sizeof(pattern), "\\%s", cmd);
+    while (*p) {
+        const char *hit = strstr(p, pattern);
+        if (!hit) { strncat(out, p, sizeof(out)-strlen(out)-1); break; }
+        strncat(out, p, (size_t)(hit - p));
+        const char *q = hit + strlen(pattern);
+        if (*q == '{') {
+            char inside[4096] = "";
+            int idx = (int)(q - s);
+            idx = extract_braced(s, idx, inside, sizeof(inside));
+            strncat(out, inside, sizeof(out)-strlen(out)-1);
+            p = s + idx;
         } else {
-            int len = strlen(tmp2);
-            tmp2[len]=s[i];
-            tmp2[len+1]=0;
-            i++;
+            // sem argumento com chaves → copia literal e segue
+            strncat(out, hit, strlen(pattern));
+            p = hit + strlen(pattern);
         }
     }
-    strcpy(s,tmp2);
+    strncpy(s, out, sizeof(out)-1);
+    s[sizeof(out)-1] = '\0';
+}
 
-    // simple token replacements
-    replace_all(s, "\\Theta", "Θ");
-    replace_all(s, "\\alpha", "α");
-    replace_all(s, "\\beta", "β");
-    replace_all(s, "\\gamma", "γ");
+// simplified ASCII transliteration for CE default font
+static void ascii_simplify(char *s) {
+    // dashes
+    replace_all(s, "–", "-");
+    replace_all(s, "—", "-");
+    // Portuguese accents (lowercase)
+    replace_all(s, "á", "a"); replace_all(s, "à", "a");
+    replace_all(s, "â", "a"); replace_all(s, "ã", "a");
+    replace_all(s, "ç", "c");
+    replace_all(s, "é", "e"); replace_all(s, "ê", "e");
+    replace_all(s, "í", "i");
+    replace_all(s, "ó", "o"); replace_all(s, "ô", "o"); replace_all(s, "õ", "o");
+    replace_all(s, "ú", "u");
+    // uppercase
+    replace_all(s, "Á", "A"); replace_all(s, "À", "A");
+    replace_all(s, "Â", "A"); replace_all(s, "Ã", "A");
+    replace_all(s, "Ç", "C");
+    replace_all(s, "É", "E"); replace_all(s, "Ê", "E");
+    replace_all(s, "Í", "I");
+    replace_all(s, "Ó", "O"); replace_all(s, "Ô", "O"); replace_all(s, "Õ", "O");
+    replace_all(s, "Ú", "U");
+}
+
+// Converte algumas sequências LaTeX em ASCII
+static void latex_words_to_ascii(char *s) {
+    // comuns no arquivo de exemplo
+    replace_all(s, "\\lfloor", "[");
+    replace_all(s, "\\rfloor", "]");
+    replace_all(s, "\\lceil", "<");
+    replace_all(s, "\\rceil", ">");
+    replace_all(s, "\\log", "log");
+    replace_all(s, "\\Theta", "Theta");
+    // letras gregas -> nomes ASCII (mínimo útil)
+    replace_all(s, "\\alpha", "alpha");
+    replace_all(s, "\\beta",  "beta");
+    replace_all(s, "\\gamma", "gamma");
+    // relacionais
     replace_all(s, "\\leq", "<=");
     replace_all(s, "\\geq", ">=");
-    // remove \\ (linebreaks) and other packages
+    // quebras LaTeX -> espaço
     replace_all(s, "\\\\", " ");
 }
 
-// wrap lines to width, using spaces as breakpoints, returns appended to dest with '\n'
-static void wrap_and_append(const char *src, char *dest) {
-    int w = LINEWIDTH;
-    char buf[4096]; strcpy(buf, src);
-    int len = (int)strlen(buf);
-    int i=0;
-    while (i < len) {
-        // find window
-        int end = (i + w < len) ? i + w : len;
-        if (end == len) {
-            strncat(dest, buf + i, end - i);
-            strcat(dest, "\n");
-            break;
+// normaliza matemática inline simples: $, ^, _, \frac, \sqrt
+static void math_normalize(char *s) {
+    // 1) remover apenas os cifrões, manter conteúdo
+    {
+        char tmp[65536]; int ti=0;
+        for (int i=0; s[i]; ++i) {
+            if (s[i] == '$') continue;
+            tmp[ti++] = s[i];
         }
-        // backtrack to last space
-        int b = end;
-        while (b > i && buf[b] != ' ') b--;
-        if (b <= i) b = end; // no space found
-        strncat(dest, buf + i, b - i);
-        strcat(dest, "\n");
-        i = (b == end) ? end : b + 1;
+        tmp[ti] = 0;
+        strcpy(s, tmp);
+    }
+
+    // 2) \sqrt{a} -> <sqrt>a</sqrt>
+    {
+        char out[65536]; out[0] = 0;
+        const char *p = s;
+        while (1) {
+            const char *hit = strstr(p, "\\sqrt");
+            if (!hit) { strncat(out, p, sizeof(out)-strlen(out)-1); break; }
+            strncat(out, p, (size_t)(hit - p));
+            const char *q = hit + strlen("\\sqrt");
+            if (*q != '{') { strncat(out, "\\sqrt", sizeof(out)-strlen(out)-1); p = q; continue; }
+            char rad[2048] = "";
+            int idx = (int)(q - s);
+            idx = extract_braced(s, idx, rad, sizeof(rad));
+            char frag[4096];
+            snprintf(frag, sizeof(frag), "<sqrt>%s</sqrt>", rad);
+            strncat(out, frag, sizeof(out)-strlen(out)-1);
+            p = s + idx;
+        }
+        strncpy(s, out, sizeof(out)-1);
+        s[sizeof(out)-1] = '\0';
+    }
+
+    // 3) \frac{a}{b} -> <frac>a|b</frac> (com chaves aninhadas)
+    {
+        char out[65536]; out[0] = 0;
+        const char *p = s;
+        while (1) {
+            const char *hit = strstr(p, "\\frac");
+            if (!hit) { strncat(out, p, sizeof(out)-strlen(out)-1); break; }
+            strncat(out, p, (size_t)(hit - p));
+            const char *q = hit + strlen("\\frac");
+            if (*q != '{') { strncat(out, "\\frac", sizeof(out)-strlen(out)-1); p = q; continue; }
+            char num[2048] = "", den[2048] = "";
+            int idx = (int)(q - s);
+            idx = extract_braced(s, idx, num, sizeof(num));   // após '}' do numerador
+            if (s[idx] == '{') {
+                idx = extract_braced(s, idx, den, sizeof(den));
+                char frag[5000];
+                snprintf(frag, sizeof(frag), "<frac>%s|%s</frac>", num, den);
+                strncat(out, frag, sizeof(out)-strlen(out)-1);
+                p = s + idx;
+            } else {
+                // malformado: retorna literal
+                strncat(out, "\\frac", sizeof(out)-strlen(out)-1);
+                p = hit + 5;
+            }
+        }
+        strncpy(s, out, sizeof(out)-1);
+        s[sizeof(out)-1] = '\0';
+    }
+
+    // 4) ^{...} / _{...} com aninhamento, e ^x/_x (1 char)
+    {
+        char out[65536]; int oi = 0;
+        for (int i=0; s[i]; ) {
+            if (s[i]=='^' || s[i]=='_') {
+                int is_sup = (s[i]=='^'); i++;
+                char inside[4096]="";
+                if (s[i]=='{') {
+                    int ni = extract_braced(s, i, inside, sizeof(inside));
+                    i = ni;
+                } else if (s[i]) {
+                    inside[0] = s[i]; inside[1]=0; i++;
+                }
+                const char *open  = is_sup ? "<sup>" : "<sub>";
+                const char *close = is_sup ? "</sup>" : "</sub>";
+                int L = (int)strlen(open);
+                memcpy(out+oi, open, L); oi += L;
+                L = (int)strlen(inside);
+                memcpy(out+oi, inside, L); oi += L;
+                L = (int)strlen(close);
+                memcpy(out+oi, close, L); oi += L;
+            } else {
+                out[oi++] = s[i++];
+            }
+            if (oi >= (int)sizeof(out)-8) break;
+        }
+        out[oi] = 0;
+        strcpy(s, out);
+    }
+
+    // 5) remover formatação de texto mantendo conteúdo
+    strip_cmd_braced(s, "textbf");
+    strip_cmd_braced(s, "emph");
+    strip_cmd_braced(s, "textit");
+    strip_cmd_braced(s, "mathbf");
+    replace_all(s, "\\displaystyle", "");
+
+    // 6) outras palavras/seqs
+    latex_words_to_ascii(s);
+}
+
+// wrap por largura fixa respeitando quebras de linha explícitas
+static void wrap_and_append(const char *src, char *dest) {
+    char whole[65536]; strncpy(whole, src, sizeof(whole)-1); whole[sizeof(whole)-1]=0;
+    char *p = whole;
+
+    while (*p) {
+        // acha fim de linha (ou fim da string)
+        char *line_end = strchr(p, '\n');
+        if (!line_end) line_end = p + strlen(p);
+        char linebuf[4096];
+        int seglen = (int)(line_end - p);
+        if (seglen >= (int)sizeof(linebuf)) seglen = (int)sizeof(linebuf)-1;
+        strncpy(linebuf, p, seglen); linebuf[seglen] = 0;
+
+        // wrap por espaços
+        int len = (int)strlen(linebuf);
+        int i = 0;
+        if (len == 0) {
+            strncat(dest, "\n", MAXPAGECHARS - strlen(dest) - 1);
+        } else {
+            while (i < len) {
+                int end = (i + LINEWIDTH < len) ? i + LINEWIDTH : len;
+                if (end == len) {
+                    strncat(dest, linebuf + i, end - i);
+                    strncat(dest, "\n", MAXPAGECHARS - strlen(dest) - 1);
+                    break;
+                }
+                int b = end;
+                while (b > i && linebuf[b] != ' ') b--;
+                if (b <= i) b = end; // palavra maior que a largura
+                strncat(dest, linebuf + i, b - i);
+                strncat(dest, "\n", MAXPAGECHARS - strlen(dest) - 1);
+                i = (b == end) ? end : b + 1;
+            }
+        }
+
+        if (*line_end == '\n') {
+            // mantém linhas em branco entre segmentos já que adicionamos \n
+            p = line_end + 1;
+        } else {
+            p = line_end;
+        }
     }
 }
 
+// escapa texto para literal C: \ -> \\, " -> \", \n -> \\n ; descarta controles e normaliza não-ASCII
+static void c_escape(const char *src, char *dst, size_t dstsz) {
+    dst[0]=0;
+    for (size_t i=0; src[i]; ++i) {
+        unsigned char ch = (unsigned char)src[i];
+        if (ch == '\\')      strncat(dst, "\\\\",   dstsz - strlen(dst) - 1);
+        else if (ch == '"')  strncat(dst, "\\\"",   dstsz - strlen(dst) - 1);
+        else if (ch == '\n') strncat(dst, "\\n",    dstsz - strlen(dst) - 1);
+        else if (ch == '\r') { /*ignore*/ }
+        else if (ch < 32)    { /*ignore control*/ }
+        else if (ch >= 0x80) {
+            // tentativa de reconhecer en-dash UTF-8 (E2 80 93)
+            if ((unsigned char)src[i] == 0xE2 &&
+                (unsigned char)src[i+1] == 0x80 &&
+                (unsigned char)src[i+2] == 0x93) {
+                strncat(dst, "-", dstsz - strlen(dst) - 1);
+                i += 2;
+            } else {
+                strncat(dst, "?", dstsz - strlen(dst) - 1);
+            }
+        } else {
+            size_t L = strlen(dst);
+            if (L + 1 < dstsz) { dst[L] = (char)ch; dst[L+1] = 0; }
+        }
+    }
+}
+
+static void flush_page(FILE *out, char *pagebuf) {
+    if (!pagebuf[0]) return;
+    // transliteração ASCII básica (antes do escape)
+    ascii_simplify(pagebuf);
+    char esc[65536];
+    c_escape(pagebuf, esc, sizeof(esc));
+    fprintf(out, "    \"%s\",\n", esc);
+    pagebuf[0] = 0;
+}
+
 int main(int argc, char **argv) {
-    if (argc < 2) { printf("Uso: %s arquivo.tex\n", argv[0]); return 1; }
-    FILE *f = fopen(argv[1], "r");
+    if (argc < 2) {
+        printf("Uso: %s arquivo.tex\n", argv[0]);
+        return 1;
+    }
+    FILE *f = fopen(argv[1], "rb");
     if (!f) { perror("fopen"); return 1; }
 
-    char line[2048];
-    char pagebuf[MAXPAGECHARS+1]; pagebuf[0]=0;
-    char outname[256]; snprintf(outname, sizeof(outname), OUTNAME);
-    FILE *out = fopen(outname, "w");
-    if (!out) { perror("out"); fclose(f); return 1; }
+    FILE *out = fopen(OUTNAME, "wb");
+    if (!out) { perror("fopen OUT"); fclose(f); return 1; }
 
-    // collect blocks separated by \section* or \maketitle as page breaks
     fprintf(out, "/* viewer_pages.c -- generated by tex2ce */\n\n");
     fprintf(out, "#include <stddef.h>\n\n");
     fprintf(out, "const char *pages[] = {\n");
 
-    // Read file, do simple processing
-    char accum[8192]; accum[0]=0;
+    char line[4096];
+    char accum[65536];    accum[0]=0;            // acumula parágrafo
+    char pagebuf[MAXPAGECHARS]; pagebuf[0]=0;    // acumula página
+    int in_doc = 0;
+
     while (fgets(line, sizeof(line), f)) {
-        trim(line);
-        if (strlen(line)==0) {
-            // paragraph break
-            if (strlen(accum)) {
-                // process accumulated paragraph
-                char proc[8192]; proc[0]=0;
-                // replace environments we don't need
-                replace_all(accum, "\\\\item", "- ");
-                // remove common preamble commands
-                if (strstr(accum, "\\maketitle")) {
-                    // nothing
-                }
-                // math normalization
+        // detecta início/fim do documento
+        if (!in_doc && strstr(line, "\\begin{document}")) { in_doc = 1; accum[0]=0; pagebuf[0]=0; continue; }
+        if (in_doc && strstr(line, "\\end{document}"))     { break; }
+
+        if (!in_doc) {
+            // ignora preâmbulo
+            continue;
+        }
+
+        // mantém linha original para detectar \section* antes de trim
+        if (strstr(line, "\\section*{")) {
+            // flush do que houver (parágrafo + página)
+            if (accum[0]) {
+                char proc[65536]; proc[0]=0;
                 math_normalize(accum);
                 wrap_and_append(accum, proc);
-
-                // append to pagebuf
-                strcat(pagebuf, proc);
-                strcat(pagebuf, "\n");
+                strncat(pagebuf, proc, sizeof(pagebuf)-strlen(pagebuf)-1);
+                strncat(pagebuf, "\n", sizeof(pagebuf)-strlen(pagebuf)-1);
                 accum[0]=0;
             }
+            flush_page(out, pagebuf);
+
+            // extrai título da seção e grava como “cabeçalho” (uma página própria)
+            char *s = strstr(line, "\\section*{");
+            char title[1024]="";
+            int i = (int)(s - line) + (int)strlen("\\section*");
+            if (line[i] == '{') {
+                i = extract_braced(line, i, title, sizeof(title));
+            }
+            // título + linha em branco
+            char head[2048]; head[0]=0;
+            strncat(head, title, sizeof(head)-strlen(head)-1);
+            strncat(head, "\n\n", sizeof(head)-strlen(head)-1);
+            char esc[4096]; c_escape(head, esc, sizeof(esc));
+            fprintf(out, "    \"%s\",\n", esc);
             continue;
         }
 
-        if (strstr(line, "\\section*{") || strstr(line, "\\maketitle") ) {
-            // flush current page if any
-            if (strlen(pagebuf)) {
-                // write page to file (escape quotes)
-                char esc[16384]; esc[0]=0;
-                for (int i=0;i<(int)strlen(pagebuf);++i) {
-                    if (pagebuf[i]=='"') strcat(esc, "\\\"");
-                    else if (pagebuf[i]=='\\') strcat(esc, "\\\\");
-                    else {
-                        int l = strlen(esc);
-                        esc[l]=pagebuf[i]; esc[l+1]=0;
-                    }
-                }
-                fprintf(out, "    \"%s\",\n", esc);
-                pagebuf[0]=0;
+        // \maketitle = quebra de página (mas ignora conteúdo)
+        if (strstr(line, "\\maketitle")) {
+            if (accum[0]) {
+                char proc[65536]; proc[0]=0;
+                math_normalize(accum);
+                wrap_and_append(accum, proc);
+                strncat(pagebuf, proc, sizeof(pagebuf)-strlen(pagebuf)-1);
+                strncat(pagebuf, "\n", sizeof(pagebuf)-strlen(pagebuf)-1);
+                accum[0]=0;
             }
-            // write the section title as separate page header
-            char *s = NULL;
-            if ((s = strstr(line, "\\section*{"))) {
-                char *q = s + strlen("\\section*{");
-                char title[512]; int k=0;
-                while (*q && *q!='}') { title[k++]=*q++; } title[k]=0;
-                char tproc[1024]; tproc[0]=0;
-                snprintf(tproc, sizeof(tproc), "%s\n\n", title);
-                char esc[2048]; esc[0]=0;
-                for (int i=0;i<(int)strlen(tproc);++i) {
-                    if (tproc[i]=='"') strcat(esc, "\\\"");
-                    else if (tproc[i]=='\\') strcat(esc, "\\\\");
-                    else {
-                        int l = strlen(esc);
-                        esc[l]=tproc[i]; esc[l+1]=0;
-                    }
-                }
-                fprintf(out, "    \"%s\",\n", esc);
-            } else if (strstr(line, "\\maketitle")) {
-                // ignore; title likely in later lines — continue
-            }
+            flush_page(out, pagebuf);
             continue;
         }
 
-        // otherwise accumulate line
-        // handle \item: keep dash
-        if (strstr(line, "\\item")) {
-            replace_all(line, "\\item", "- ");
+        // Acúmulo normal
+        {
+            char work[4096]; strncpy(work, line, sizeof(work)-1); work[sizeof(work)-1]=0;
+            trim(work);
+            if (!*work) {
+                if (accum[0]) {
+                    char proc[65536]; proc[0]=0;
+                    // trata \item e outras coisinhas
+                    replace_all(accum, "\\item", "- ");
+                    math_normalize(accum);
+                    wrap_and_append(accum, proc);
+                    strncat(pagebuf, proc, sizeof(pagebuf)-strlen(pagebuf)-1);
+                    strncat(pagebuf, "\n", sizeof(pagebuf)-strlen(pagebuf)-1);
+                    accum[0]=0;
+                }
+                continue;
+            }
+
+            // descarta marcadores de ambiente de lista/centro
+            if (strstr(work, "\\begin{itemize}") || strstr(work, "\\end{itemize}") ||
+                strstr(work, "\\begin{enumerate}") || strstr(work, "\\end{enumerate}") ||
+                strstr(work, "\\begin{center}") || strstr(work, "\\end{center}")) {
+                continue;
+            }
+
+            // quebra de página manual
+            if (strstr(work, "\\clearpage")) {
+                if (accum[0]) {
+                    char proc[65536]; proc[0]=0;
+                    math_normalize(accum);
+                    wrap_and_append(accum, proc);
+                    strncat(pagebuf, proc, sizeof(pagebuf)-strlen(pagebuf)-1);
+                    strncat(pagebuf, "\n", sizeof(pagebuf)-strlen(pagebuf)-1);
+                    accum[0]=0;
+                }
+                flush_page(out, pagebuf);
+                continue;
+            }
+
+            // mantém bullets simples
+            if (strstr(work, "\\item")) replace_all(work, "\\item", "- ");
+
+            // converte \\ no fim da linha para quebra explícita
+            if (strstr(work, "\\\\")) replace_all(work, "\\\\", "\n");
+
+            if (accum[0]) strncat(accum, " ", sizeof(accum)-strlen(accum)-1);
+            strncat(accum, work, sizeof(accum)-strlen(accum)-1);
         }
-        // append to accum with a space
-        if (strlen(accum)) strcat(accum, " ");
-        strcat(accum, line);
     }
 
-    // flush remaining accum/pagebuf
-    if (strlen(accum)) {
-        char proc[8192]; proc[0]=0;
+    // flush final
+    if (accum[0]) {
+        char proc[65536]; proc[0]=0;
         math_normalize(accum);
         wrap_and_append(accum, proc);
-        strcat(pagebuf, proc);
-        strcat(pagebuf, "\n");
+        strncat(pagebuf, proc, sizeof(pagebuf)-strlen(pagebuf)-1);
+        strncat(pagebuf, "\n", sizeof(pagebuf)-strlen(pagebuf)-1);
+        accum[0]=0;
     }
-    if (strlen(pagebuf)) {
-        char esc[16384]; esc[0]=0;
-        for (int i=0;i<(int)strlen(pagebuf);++i) {
-            if (pagebuf[i]=='"') strcat(esc, "\\\"");
-            else if (pagebuf[i]=='\\') strcat(esc, "\\\\");
-            else {
-                int l = (int)strlen(esc);
-                esc[l]=pagebuf[i]; esc[l+1]=0;
-            }
-        }
-        fprintf(out, "    \"%s\",\n", esc);
-    }
+    flush_page(out, pagebuf);
 
-    // sentinel
     fprintf(out, "    NULL\n};\n");
-    fclose(f); fclose(out);
+    fclose(f);
+    fclose(out);
     printf("Gerado %s com pages[].\n", OUTNAME);
     return 0;
 }
