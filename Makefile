@@ -5,7 +5,7 @@ COMPRESSED = YES
 ARCHIVED = YES
 
 # Fontes
-SRC = src/tex2ce.c
+SRC = src/tex2ce.c latex_viewer_ce.c
 
 # Otimizacoes e libs (graphx, keypadc, tice)
 CFLAGS = -Wall -Wextra -Oz
