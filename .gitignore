@@ -3,3 +3,6 @@
 viewer_pages.c
 *.exe
 .vscode
+/bin/*
+*.rar
+*.8xv
