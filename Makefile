@@ -1,11 +1,11 @@
 # Nome do programa (aparece em PRGM)
-NAME = LaTeX
-DESCRIPTION = "LaTeX (demo CE C)"
-COMPRESSED = YES
-ARCHIVED = YES
+NAME := LaTeX
+DESCRIPTION := "LaTeX (demo CE C)"
+COMPRESSED := YES
+ARCHIVED := YES
 
 # Fontes
-SRC = src/tex2ce.c latex_viewer_ce.c
+SRC := src/main.c
 
 # Otimizacoes e libs (graphx, keypadc, tice)
 CFLAGS = -Wall -Wextra -Oz
