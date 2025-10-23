@@ -6,3 +6,8 @@ viewer_pages.c
 /bin/*
 *.rar
 *.8xv
+*.8xp
+tools/out.bin
+build_final.bat
+/legacy
+*.bin

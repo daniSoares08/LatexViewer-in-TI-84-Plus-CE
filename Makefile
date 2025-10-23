@@ -1,15 +1,14 @@
 # Nome do programa (aparece em PRGM)
-NAME := LaTeX
-DESCRIPTION := "LaTeX (demo CE C)"
+NAME := EX1LAMBD
+DESCRIPTION := "EX1"
 COMPRESSED := YES
 ARCHIVED := YES
 
-# Fontes
+# Só o viewer de AppVar:
 SRC := src/main.c
 
-# Otimizacoes e libs (graphx, keypadc, tice)
-CFLAGS = -Wall -Wextra -Oz
-LDFLAGS = -lgraphx -lkeypadc -ltice -lm
-
+# Flags e libs
+CFLAGS  := -Wall -Wextra -Oz
+LIBS    := -lgraphx -lkeypadc -lfileioc -ltice -lm
 
 include $(shell cedev-config --makefile)
