@@ -1,4 +1,135 @@
-# README-TEX — Escrevendo o subset LaTeX para este viewer
+# README-TEX — Writing the LaTeX subset for this viewer (EN)
+
+Authoring guide for the **LaTeX subset** recognized by `tools/tex2ce`. Everything is 7-bit ASCII.
+
+---
+
+## What is supported
+
+* **ASCII text** (no accents/Unicode).
+* **Fractions**: `\frac{NUM}{DEN}`
+* **Superscript**: `^{...}` or `^X` (without braces → 1 character)
+* **Subscript**: `_{...}` or `_X` (without braces → 1 character)
+* **Line break**: `\\`
+* **Paragraph**: a **blank line** (2+ consecutive `\n`)
+
+> Nesting is allowed: `\frac{a^2}{b_c}`, `\frac{\frac{1}{2}x^2}{3y_1}`, etc.
+
+---
+
+## What is **not** supported
+
+* `\sqrt`, `\sum`, `\alpha`, `\beta`, environments, images, alignment, etc.
+* Unicode (accents/symbols). Write plain words like “rho”, “pi”, “epsilon”, “integral”.
+* **Breaks inside** `\frac{...}{...}` (no internal wrapping inside fractions).
+
+---
+
+## ASCII aliases (optional)
+
+The converter replaces the commands below by equivalent **ASCII text**:
+
+* `\rho`→`rho`, `\pi`→`pi`, `\varepsilon`/`\verepsilon`→`epsilon`
+* `\approx`/`\simeq`→`~=`
+* `\Rightarrow`→`=>`, `\rightarrow`/`\to`→`->`
+* `\left`/`\right`/`\Big`/`\big`→`` (discarded; use normal parentheses)
+* `\int`→`integral`, `\quad`→` ` (one space)
+* Extras: `\cdot`→`*`, `\times`→`*`, `\leq`→`<=`, `\geq`→`>=`, `\neq`→`!=`, `\pm`→`+/-`
+* `\ ` (backslash + space) becomes a **single space**
+
+> Even with aliases, it is **safe** to just write `rho`, `pi`, `epsilon`, `~=` directly.
+
+---
+
+## Practical rules
+
+1. **Pure ASCII**
+   Avoid `áéíóúç`. Use 7-bit only. Any char outside 32..126 becomes `?`.
+
+2. **Fractions**
+   **Required** format: `\frac{NUM}{DEN}` with **balanced braces**.
+   Do not put `\\` or blank lines **inside** `NUM`/`DEN`.
+
+3. **Superscripts/Subscripts**
+   `x^2`, `x^{10}`, `y_1`, `A_{k+1}`.
+   Without braces → counts as **one** character.
+
+4. **Breaks**
+   `\\` makes an **immediate** line break.
+   A **blank line** starts a **new paragraph** (extra vertical space).
+   Do not use `$...$`; everything is inline.
+
+5. **Layout on the CE**
+   The viewer does **word wrapping** when width (~312 px) is exceeded.
+   Still, prefer short sentences and break manually with `\\` at natural points.
+   Avoid very dense single lines (especially deeply nested fractions).
+
+6. **Scientific notation**
+   Write `3.0e-6`, `8.99e9` (short and clear).
+
+---
+
+## Examples
+
+**Simple sup/sub**
+
+```
+This is a test: x^2 + y_1.
+Inline: E = mc^2, A_k = \frac{k(k+1)}{2}.
+```
+
+**Fractions and nesting**
+
+```
+A fraction: \frac{a+b}{c+d}
+Nested: \frac{\frac{1}{2}x^2}{3y_1}
+```
+
+**Breaks and paragraphs**
+
+```
+Manual break with \ here:
+line A \ line B after the break.
+
+Paragraph below (blank line above):
+
+Sum of the first n integers:
+S_n = \frac{n(n+1)}{2}
+```
+
+---
+
+## Quick pipeline test
+
+At the repo root:
+
+```
+build_final EX1TEST tools\ex1.tex
+```
+
+Expected output:
+
+```
+prontos\EX1TEST.8xp
+prontos\EX1TEST.8xv
+```
+
+Send **both** to the CE and run `EX1TEST`.
+
+---
+
+## Common pitfalls
+
+* **Braces**: `\frac{ ... }{ ... }` must open/close; if one is missing, the converter eats until the end and breaks the doc.
+* **Spaces**: are preserved (8×8 font). Many spaces = a lot of width.
+* **Long lines**: wrapping helps, but break with `\\` to keep it readable.
+* **Commands outside the subset**: will appear as literal text unless they are in the **aliases** list above.
+
+
+---
+
+
+# PT-BR version
 
 Guia de escrita do **subset LaTeX** reconhecido por `tools/tex2ce`. Tudo é ASCII 7-bit.
 
