@@ -1,205 +1,124 @@
 # README — LatexViewer-in-TI-84-Plus-CE
 
-Uma visão geral de **como usar, buildar e empacotar** o viewer + AppVar de conteúdo para a TI-84 Plus CE (inclui CE Python). Este README reflete **exatamente** as mudanças que aplicamos (sup/sub “dentro da linha”, culling, saída instantânea pelo ON, e nome do AppVar parametrizado via macro).
+Visão geral de **como usar, buildar e empacotar** o viewer + AppVar de conteúdo para a TI-84 Plus CE (inclui CE Python).
+Este README reflete o estado atual do projeto: **wrap por palavras**, **anti-flicker** no topo, sup/sub “dentro da linha”,
+nome de AppVar parametrizado e conversor `tex2ce` com **sanitização ASCII + aliases**.
 
 ---
 
 ## O que é
 
 * **Ferramentas no PC**
-
-  * `tools/tex2ce.c` → conversor do seu **subset LaTeX** para **bytecode**.
+  * `tools/tex2ce.c` → conversor do **subset LaTeX** para **bytecode** do viewer.
   * `convbin` → empacota o bytecode em um **AppVar `.8xv`**.
 * **App na calculadora**
+  * `src/main.c` → programa `.8xp` que **lê o AppVar** e **desenha**: frações reais, sup/sub inline, quebras, rolagem
+    por setas, saída imediata com ON, clipping e **scroll estável (sem “piscar”)**.
 
-  * `src/main.c` → programa `.8xp` (CEdev) que **lê o AppVar** e **desenha** (frações com barra, expoentes e subscritos, quebras de linha, rolagem, ON sai na hora).
-
-**Você envia 2 arquivos para a calculadora por exercício:**
-o **executável** (`.8xp`) e o **AppVar** (`.8xv`). Eles devem compartilhar **o mesmo nome** (ex.: `EX1LAMB.8xp` e `EX1LAMB.8xv`), pois o executável abre o AppVar homônimo.
+Você envia **2 arquivos** por exercício para a calculadora:
+o **executável** (`.8xp`) e o **AppVar** (`.8xv`) com o **mesmo nome** (ex.: `EX1.8xp` e `EX1.8xv`).
 
 ---
 
-## Estrutura do projeto
+## Estrutura
 
-```
 LatexViewer-in-TI-84-Plus-CE/
-  src/
-    main.c          # app da calculadora
-  tools/
-    tex2ce.c        # conversor PC
-    tex2ce.exe      # (gerado por você no PC)
-    *.tex           # seus textos LaTeX subset (entrada)
-    *.8xv           # AppVars gerados (saída intermediária)
-  prontos/          # SAÍDA FINAL: pares .8xp + .8xv para enviar à CE
-  Makefile          # CEdev (gera o .8xp)
-  build_final.bat   # script de automação (gera ambos e copia p/ prontos/)
-```
+- `src/`
+  - `main.c`          # app da calculadora
+- `tools/`
+  - `tex2ce.c`        # conversor (fonte)
+  - `tex2ce.exe`      # gerado pelo build
+  - `*.tex`           # textos LaTeX subset (entrada)
+  - `*.8xv`           # AppVars gerados (intermediários; o .bat limpa ao final)
+- `prontos/`          # SAÍDA FINAL: pares .8xp + .8xv para enviar à CE
+- `Makefile`          # CEdev (gera o .8xp)
+- `build_final.bat`   # automação (compila tex2ce, gera .8xv/.8xp, copia e limpa)
 
 ---
 
 ## Pré-requisitos
 
-* **CEdev** funcionando (inclui `make`, `convimg`, linker, etc.).
-* **convbin** acessível no PATH.
-* `tex2ce.exe` compilado a partir de `tools/tex2ce.c` (ou já presente).
-* Windows (script `.bat`).
+- **CEdev** funcionando (make, convimg, linker, etc.).
+- **convbin** no PATH.
+- **gcc** para compilar `tools/tex2ce.c`.
+- Windows (script `.bat`).
 
 ---
 
-## Como usar (workflow típico)
+## Como usar
 
 ### 1) Escreva o `.tex` (subset)
+Coloque seu arquivo em `tools\`.  
+O subset aceito está em **README-TEX** (inclui a lista de **aliases ASCII** úteis).
 
-Coloque seu arquivo (ex.: `ex1.tex`) em `tools\`.
-
-> O subset aceito está no **README-TEX** abaixo.
-
-### 2) Gere os dois arquivos finais de uma vez
-
-Na **raiz do projeto**, rode:
-
-```
-build_final EX1LAMB ex1.tex
+### 2) Gere `.8xv` + `.8xp`
+Na **raiz**, rode:
 ```
 
-Ele vai:
+build_final NOME_ARQ tools\arquivo.tex
 
-1. Converter `tools\ex1.tex` → `tools\out.bin` (bytecode).
-2. Empacotar `tools\out.bin` → `tools\EX1LAMB.8xv` (AppVar com **nome interno EX1LAMB**).
-3. Compilar o **executável** `.8xp` com `NAME=EX1LAMB` e definindo `DOC_NAME=EX1LAMB`.
-4. Copiar **ambos** para `prontos\EX1LAMB.8xp` e `prontos\EX1LAMB.8xv`.
+```
+Exemplo:
+```
 
-> Se você não informar o segundo argumento, o script tenta `tools\%NAME%.tex`, e se não existir, cai em `tools\entrada.tex`.
+build_final EX1 tools\EX1.tex
+
+```
+
+O script faz:
+1) **gcc** compila `tools\tex2ce.c` → `tools\tex2ce.exe`  
+2) `tools\tex2ce.exe` converte `.tex` → `tools\out.bin`  
+3) `convbin` empacota `out.bin` → `tools\NOME_ARQ.8xv` (AppVar com nome interno = `NOME_ARQ`)  
+4) `make` compila `src/main.c` → `bin\NOME_ARQ.8xp` com `-DDOC_NAME=NOME_ARQ`  
+5) Copia `bin\NOME_ARQ.8xp` e `tools\NOME_ARQ.8xv` → `prontos\`  
+6) **Limpa** `tools\NOME_ARQ.8xv` e `tools\out.bin`
+
+> Sem o segundo argumento, o `.bat` tenta `tools\%NAME%.tex` e, se faltar, usa `tools\entrada.tex`.
 
 ### 3) Envie para a calculadora
+Transfira **ambos** de `prontos\`:
+- `NOME_ARQ.8xp` (programa)
+- `NOME_ARQ.8xv` (AppVar com nome interno **NOME_ARQ**)
 
-Transfira **os dois arquivos** de `prontos\`:
-
-* `EX1LAMB.8xp` (programa)
-* `EX1LAMB.8xv` (AppVar de dados, nome interno **EX1LAMB**)
-
-> **Regra da TI para nomes de AppVar**: até **8 caracteres**, preferencialmente **maiúsculos** e sem espaços.
+> **Regra TI**: nome de AppVar até **8 caracteres**, preferencialmente **MAIÚSCULO** e sem espaços.
 
 ### 4) Rode
-
-* Abra `EX1LAMB` (no Cesium/PRGM).
-* **Setas ↑/↓**: rolagem vertical (trigger em “toque”, sem auto-repeat).
-* **ON**: sai **instantaneamente** (sem travar).
-
----
-
-## O que mudei no código (importante p/ manutenção)
-
-1. **Nome do AppVar parametrizado**
-
-   * No `main.c`:
-
-     ```c
-     #ifndef DOC_NAME
-     #define DOC_NAME DOC1
-     #endif
-     #define _S2(x) #x
-     #define _S1(x) _S2(x)
-     #define DOC_NAME_STR _S1(DOC_NAME)
-     ...
-     ti_var_t v = ti_Open(DOC_NAME_STR, "r");
-     ```
-   * O build define `-DDOC_NAME=EX1LAMB` (sem aspas). O macro “stringify” vira `"EX1LAMB"`.
-
-2. **Superscrito/Subscrito “dentro” da linha**
-
-   * `SUP` desenhado em `y + 1px` (fora de fração) e `y + 1px` (dentro de fração), **sem clamp para 0** (acabou o bug de “grudar no topo”).
-   * `SUB` desce `6px` e **aumenta** a altura de linha.
-
-3. **Frações reais**
-
-   * Numerador/denominador medidos, centralizados e barra horizontal com espessura `FRAC_BAR`.
-   * Aninhamento de `\frac{}` suportado.
-
-4. **Clipping e scroll estável**
-
-   * Ignoro 2 frames (warm-up) para evitar scroll residual na abertura.
-   * Culling por **linha** no loop principal + culling por **nó** dentro de sequências.
+- Abra `NOME_ARQ` (Cesium/PRGM).
+- **Setas ↑/↓**: rolagem vertical (edge trigger).
+- **ON**: sai instantaneamente.
 
 ---
 
-## Script de automação (o que ele faz)
+## O que já está implementado
 
-`build_final.bat` (na raiz):
+**Viewer (`src/main.c`)**
+- Superscrito/Subscrito **inline** (SUP desce 1 px; SUB desce 6 px e aumenta altura de linha).
+- **Frações reais** com medição e centralização (barra espessura `FRAC_BAR`), aninhamento suportado.
+- **Wrap por palavras** para `TAG_TEXT` (evita “voltar e escrever por cima”).
+- **Anti-flicker no topo**: linhas acima do topo são puladas integralmente.
+- **Contexto de fração** (`g_in_frac`) para posicionamento de SUP dentro de frações.
+- Rolagem estável e saída com ON latch.
 
-* Gera o AppVar com nome interno **= NAME**:
-
-  ```bat
-  pushd tools
-  tex2ce "%SRC%" out.bin
-  convbin -r -k 8xv -n %NAME% -i out.bin -o "%NAME%.8xv"
-  popd
-  ```
-* Compila o `.8xp` apontando para o mesmo AppVar:
-
-  ```bat
-  make clean
-  make NAME=%NAME% CFLAGS="-Wall -Wextra -Oz -DDOC_NAME=%NAME%"
-  ```
-* Copia para **`prontos\`**:
-
-  ```bat
-  copy /Y "bin\%NAME%.8xp" "prontos\%NAME%.8xp"
-  copy /Y "tools\%NAME%.8xv" "prontos\%NAME%.8xv"
-  ```
-
-> Se quiser compilar **vários** de uma vez, basta chamar repetidamente:
->
-> ```
-> build_final EX1LAMB ex1.tex
-> build_final EX2CAMPO ex2.tex
-> build_final EX3POT   ex3.tex
-> ...
-> ```
+**Conversor (`tools/tex2ce.c`)**
+- **ASCII 7-bit** (qualquer char fora de 32..126 vira `?`).
+- **Comandos suportados nativamente**: `\frac{A}{B}`, `^{...}`/`^X`, `_{...}`/`_X`, `\\`.
+- **Aliases ASCII** (mapeados como texto plano):
+  - `\rho`→`rho`, `\pi`→`pi`, `\varepsilon`/`\verepsilon`→`epsilon`
+  - `\approx`/`\simeq`→`~=`
+  - `\Rightarrow`→`=>`, `\rightarrow`/`\to`→`->`
+  - `\left`/`\right`/`\Big`/`\big`→`` (descarta; parênteses reais ficam)
+  - `\int`→`integral`, `\quad`→` ` (um espaço)
+  - extras: `\cdot`→`*`, `\times`→`*`, `\leq`→`<=`, `\geq`→`>=`, `\neq`→`!=`, `\pm`→`+/-`
+- `\ ` (barra + espaço) vira **um espaço**.
+- Nova linha: 1 LF → quebra (`TAG_NL`); 2+ LFs → parágrafo (`TAG_PAR`).
 
 ---
 
 ## Dicas / Troubleshooting
 
-* **“AppVar não encontrado” logo ao abrir**
-
-  * Confirme que você enviou **os dois arquivos**.
-  * O **nome interno** do AppVar (passado via `-n` no `convbin`) **deve bater** com o `DOC_NAME` do executável.
-  * Lembre da regra dos **8 caracteres**.
-
-* **Acentos / símbolos esquisitos**
-
-  * Use **ASCII puro** no `.tex`. O conversor não emite Unicode.
-
-* **Flicker / linhas colando no topo**
-
-  * Já resolvido com o patch de `SUP` e o warm-up de teclado.
-
-* **Frações colidindo com outras linhas**
-
-  * Corrigido (SUP dentro da linha e clipping por linha).
-  * Evite colocar `\\` **dentro** de `\frac{...}{...}` (não há quebra interna em frações).
-
-* **`seq_stats` warn “unused”**
-
-  * Pode remover a função ou deixar (warning inofensivo).
-
-* **Só atualizar o conteúdo, sem recompilar o .8xp**
-
-  * Se o executável já aponta para `DOC1`, você pode **regerar apenas** o `DOC1.8xv`.
-  * Em builds nomeados (EX1/EX2…), normalmente você mantém os pares sincronizados pelo `build_final`.
-
----
-
-## Para futuras edições comigo (coisas que vou lembrar)
-
-* O viewer usa **topo de linha** como referência (não baseline).
-* `SUP`/`SUB` **não** mudam largura; `SUB` **aumenta** a altura da linha; `SUP` **não**.
-* `FRAC`: mede numerador/denominador, define altura `hn + gaps + bar + hd`.
-* **Rolagem**: setas ↑/↓ por “toque” (edge trigger), sem auto-repeat.
-* **ON**: `kb_EnableOnLatch()` + latch clean + `gfx_End()` → **sai instantaneamente**.
-* **Limite de largura** ≈ `right = 312` px; wrap automático quando ultrapassa.
-* **Nome do AppVar**: `DOC_NAME` como **token** (sem aspas) e `_S1/_S2` para “stringify”.
-
----
+- **“AppVar não encontrado”**: envie **.8xp + .8xv**; confirme que `-n` do convbin (nome interno) **bate** com `DOC_NAME` do `.8xp`. Máx. 8 caracteres.
+- **Comandos LaTeX literais na tela**: use apenas o **subset** e os **aliases** listados; evite Unicode.
+- **Linhas longas sobrepondo**: o wrap por palavras já evita; ainda assim, prefira quebrar com `\\` em pontos naturais.
+- **Flicker no topo**: já mitigado (linhas acima do topo são puladas).
+- **Apenas atualizar conteúdo**: se `DOC_NAME` não mudou, pode regerar só o `.8xv` (o `.8xp` já aponta para o mesmo nome).
 

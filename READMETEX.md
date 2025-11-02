@@ -1,115 +1,133 @@
 # README-TEX — Escrevendo o subset LaTeX para este viewer
 
-Este README é um **guia de escrita** da sua linguagem de marcação minimalista (subset LaTeX) reconhecida pelo `tools/tex2ce`.
+Guia de escrita do **subset LaTeX** reconhecido por `tools/tex2ce`. Tudo é ASCII 7-bit.
+
+---
 
 ## O que é suportado
 
-* Texto **ASCII** (sem acentos/Unicode).
-* **Frações**: `\frac{numerador}{denominador}`
+* **Texto ASCII** (sem acentos/Unicode).
+* **Frações**: `\frac{NUM}{DEN}`
 * **Expoente**: `^{...}` ou `^X` (sem chaves → 1 caractere)
 * **Subscrito**: `_{...}` ou `_X` (sem chaves → 1 caractere)
 * **Quebra de linha**: `\\`
-* **Parágrafo**: **linha em branco** (uma ou mais quebras `\n` consecutivas)
+* **Parágrafo**: **linha em branco** (2+ quebras `\n` consecutivas)
 
-> Aninhamento é permitido: `\frac{a^2}{b_c}`, `\frac{\frac{1}{2}x^2}{3y_1}` etc.
+> Aninhamento permitido: `\frac{a^2}{b_c}`, `\frac{\frac{1}{2}x^2}{3y_1}` etc.
 
-## O que **não** é suportado (por enquanto)
+---
 
-* `\sqrt{}`, `\sum`, `\int`, `\alpha`, `\beta`… (símbolos gregos), ambientes, imagens, alinhamento, etc.
-* Unicode (acentos): use “e”, “cao”, “integral”, “pi”, etc.
-* Quebras **dentro** de `\frac{...}{...}` (o render não cria múltiplas linhas dentro de frações).
+## O que **não** é suportado
 
-## Regras práticas e dicas
+* `\sqrt`, `\sum`, `\alpha`, `\beta`, ambientes, imagens, alinhamento, etc.
+* Unicode (acentos/símbolos). Escreva “rho”, “pi”, “epsilon”, “integral”.
+* **Quebras dentro** de `\frac{...}{...}` (não há wrap interno em frações).
 
-1. **ASCII puro**
+---
 
-   * Evite `áéíóúç` — substitua por equivalentes sem acento.
-   * Sinais: `*` para multiplicação, `^` para potências, `_` para subscritos.
+## Aliases ASCII (opcionais)
 
-2. **Frações**
+O conversor substitui os comandos abaixo por **texto ASCII** equivalente:
 
-   * Formato **obrigatório**: `\frac{NUM}{DEN}` com **chaves** balanceadas.
-   * Pode aninhar: `\frac{ \frac{1}{2}x^2 }{ 3y_1 }`
-   * Dentro de `NUM`/`DEN`, evite `\\` e linhas em branco.
+* `\rho`→`rho`, `\pi`→`pi`, `\varepsilon`/`\verepsilon`→`epsilon`
+* `\approx`/`\simeq`→`~=`
+* `\Rightarrow`→`=>`, `\rightarrow`/`\to`→`->`
+* `\left`/`\right`/`\Big`/`\big`→`` (descarta; use parênteses normais)
+* `\int`→`integral`, `\quad`→` ` (um espaço)
+* Extras: `\cdot`→`*`, `\times`→`*`, `\leq`→`<=`, `\geq`→`>=`, `\neq`→`!=`, `\pm`→`+/-`
+* `\ ` (barra + espaço) vira **um espaço**
 
-3. **Expoentes/Subscritos**
+> Mesmo com aliases, é **seguro** escrever diretamente `rho`, `pi`, `epsilon`, `~=`.
 
-   * `a^2`, `x^{10}`, `y_1`, `A_{k+1}`.
-   * Sem chaves → pega **um** caractere: `x^2` OK, mas `x^10` precisa `x^{10}`.
+---
 
-4. **Quebras**
+## Regras práticas
 
-   * `\\` cria quebra **imediata** de linha.
-   * **Linha em branco** cria **parágrafo** (ganha uma linha extra de espaçamento).
-   * Você não precisa de modo matemático `$...$`; tudo é tratado como inline.
+1) **ASCII puro**  
+Evite `áéíóúç`. Use apenas 7-bit. Qualquer char fora de 32..126 vira `?`.
 
-5. **Layout e legibilidade na CE**
+2) **Frações**  
+Formato **obrigatório** `\frac{NUM}{DEN}` com **chaves balanceadas**.  
+Não coloque `\\` ou linhas em branco **dentro** de `NUM`/`DEN`.
 
-   * O viewer faz **quebra automática** quando a largura passa ~312 px.
-   * Prefira frases curtas; use `\\` para “guiar” a leitura no display 320×240.
-   * Evite expressões muito densas numa única linha (principalmente frações aninhadas).
+3) **Expoentes/Subscritos**  
+`x^2`, `x^{10}`, `y_1`, `A_{k+1}`.  
+Sem chaves → vale **um** caractere.
 
-6. **Números científicos**
+4) **Quebras**  
+`\\` cria **quebra imediata** de linha.  
+**Linha vazia** cria **parágrafo** (linha extra de espaço).  
+Não use `$...$`; tudo é inline.
 
-   * Escreva como `3.0e-6`, `8.99e9`, etc. (sem `\times 10^{...}` se quiser ser mais conciso).
+5) **Layout na CE**  
+O viewer faz **wrap por palavras** quando a largura (~312 px) estoura.  
+Mesmo assim, prefira frases curtas e quebre manualmente com `\\` em pontos naturais.  
+Evite expressões muito densas numa única linha (principalmente frações aninhadas extensas).
 
-## Exemplos úteis
+6) **Notação científica**  
+Escreva `3.0e-6`, `8.99e9` (curto e claro).
 
-### Texto simples com sup/sub
+---
 
+## Exemplos
+
+**Sup/Sub simples**
 ```
+
 Este e um teste: x^2 + y_1.
-Texto inline com sup/sub: E = mc^2, A_k = \frac{k(k+1)}{2}.
-```
-
-### Frações e aninhamento
+Inline: E = mc^2, A_k = \frac{k(k+1)}{2}.
 
 ```
-Uma fracao simples: \frac{a+b}{c+d}
-Agora uma fracao aninhada:
-\frac{\frac{1}{2}x^2}{3y_1}
+
+**Frações e aninhamento**
 ```
 
-### Quebras e paragrafos
+Uma fracao: \frac{a+b}{c+d}
+Aninhada: \frac{\frac{1}{2}x^2}{3y_1}
 
 ```
-Quebra manual com \\ aqui:
-linha A \\ linha B apos a quebra.
 
-Outra linha:
+**Quebras e parágrafos**
+```
+
+Quebra manual com \ aqui:
+linha A \ linha B apos a quebra.
+
+Paragrafo abaixo (linha vazia acima):
 
 Soma dos primeiros n inteiros:
 S_n = \frac{n(n+1)}{2}
+
 ```
+
+---
 
 ## Teste rápido do pipeline
 
 Na raiz:
-
 ```
-build_final EX1TEST ex1.tex
+
+build_final EX1TEST tools\ex1.tex
+
 ```
 
 Saída esperada:
-
 ```
+
 prontos\EX1TEST.8xp
 prontos\EX1TEST.8xv
+
 ```
 
-Envie os dois para a CE e rode `EX1TEST`.
-
-## Dicas de “pitfall”
-
-* **Chaves balanceadas**: `\frac{ ... }{ ... }` precisa **abrir e fechar**. Se faltar, o conversor segue lendo até o fim e o resultado fica quebrado.
-* **Espaços**: são preservados (fonte 8×8). Vários espaços viram “largura” mesmo.
-* **Linhas muito longas**: o wrap automático ajuda, mas pode cortar “feio” entre blocos; use `\\` se quiser quebrar antes.
+Envie **ambos** para a CE e rode `EX1TEST`.
 
 ---
 
-Pronto! Com estes dois READMEs você tem:
+## “Pitfalls” comuns
 
-* O **guia completo** pra montar seus pares `.8xp`/`.8xv` e organizar tudo em `prontos\`.
-* O **guia de escrita** do `.tex` para este viewer específico.
+* **Chaves**: `\frac{ ... }{ ... }` precisa abrir/fechar; se faltar, o conversor consome até o fim e quebra tudo.
+* **Espaços**: são preservados (fonte 8×8). Muitos espaços = muita largura.
+* **Linhas longas**: o wrap ajuda, mas quebre com `\\` para manter legível.
+* **Comandos fora do subset**: aparecerão como texto literal, a menos que estejam na lista de **aliases** acima.
 
-Se quiser, escrevo uma versão **em lote** do `.bat` para processar `EX1..EX5` numa tacada só.
+```
