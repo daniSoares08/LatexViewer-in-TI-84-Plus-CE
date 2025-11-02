@@ -28,6 +28,20 @@ static int match(Src *src, char c){ if(peek(src)==c){src->i++;return 1;} return 
 
 static void parse_block(Src *src, Vec *out); // fwd
 
+// ---- ASCII sanitize (mapa 7-bit) ----
+static void emit_text_ascii(Vec *out, const char *beg, size_t n){
+    if(!n) return;
+    char *tmp = (char*)malloc(n);
+    size_t m = 0;
+    for(size_t i=0;i<n;i++){
+        unsigned char ch = (unsigned char)beg[i];
+        if (ch == '\t') { tmp[m++] = ' '; continue; }
+        if (ch < 32 || ch > 126) { tmp[m++] = '?'; continue; } // 7-bit only
+        tmp[m++] = (char)ch;
+    }
+    put_u8(out,0x01); put_u16(out,(u16)m); vec_put(out,tmp,m); free(tmp);
+}
+
 static void parse_group_into(Src *src, Vec *payload){
     if(!match(src,'{')) return;
     int depth=1; Src sub=*src; size_t start=sub.i;
@@ -39,10 +53,7 @@ static void parse_group_into(Src *src, Vec *payload){
     parse_block(&inner,payload);
     src->i=sub.i;
 }
-static void emit_text(Vec *out, const char *beg, size_t n){
-    if(!n) return;
-    put_u8(out,0x01); put_u16(out,(u16)n); vec_put(out,beg,n);
-}
+static void emit_text(Vec *out, const char *beg, size_t n){ emit_text_ascii(out,beg,n); }
 
 static void parse_block(Src *src, Vec *out){
     const char *tstart = src->s + src->i; size_t tlen = 0;
@@ -74,8 +85,15 @@ static void parse_block(Src *src, Vec *out){
         }
         // --------------------------------------
 
-        if (c == '\\') {                 // comandos (\frac e \\)
+        if (c == '\\') {                 // comandos (\frac, \\ e aliases)
             emit_text(out, tstart, tlen); tlen = 0; get(src);
+
+            // barra + espaco -> apenas um espaco (evita "\" solto)
+            if (peek(src) == ' ') {
+                emit_text(out, " ", 1); src->i++;
+                tstart = src->s + src->i;
+                continue;
+            }
 
             if (strncmp(src->s+src->i, "frac", 4) == 0) {
                 src->i += 4;
@@ -93,12 +111,50 @@ static void parse_block(Src *src, Vec *out){
                 tstart = src->s + src->i;
 
             } else {
-                // comando desconhecido → imprime literal
+                // aliases: mapeia alguns \comandos para ASCII
+                static const struct { const char *cmd, *subst; } alias[] = {
+                    {"rho",        "rho"},
+                    {"pi",         "pi"},
+                    {"approx",     "~="},
+                    {"simeq",      "~="},
+                    {"Rightarrow", "=>"},
+                    {"rightarrow", "->"},
+                    {"to",         "->"},
+                    {"varepsilon", "epsilon"},
+                    {"verepsilon", "epsilon"}, // tolera o typo
+                    {"Ohm",        "ohm"},     // opcional
+                    {"left",       ""},        // \left( ... ) => apenas imprime '(' e ')'
+                    {"right",      ""},        // idem
+                    {"Big",        ""},        // tamanhos nao existem no viewer
+                    {"big",        ""},        // idem
+                    {"int",        "integral"},// \int -> "integral" (ASCII)
+                    {"quad",       " "},       // espaco largo -> 1 espaco (pode usar "  ")
+                    // extras uteis (opcionais):
+                    {"cdot",       "*"},
+                    {"times",      "*"},
+                    {"leq",        "<="},
+                    {"geq",        ">="},
+                    {"neq",        "!="},
+                    {"pm",         "+/-"},
+                    {NULL, NULL}
+                };
                 size_t j = src->i;
                 while (j < src->n && isalpha((unsigned char)src->s[j])) j++;
                 size_t k = j - src->i;
-                emit_text(out, "\\", 1);
-                emit_text(out, src->s + src->i, k);
+                const char *name = src->s + src->i;
+                const char *subst = NULL;
+                for (int a=0; alias[a].cmd; ++a){
+                    if (k == strlen(alias[a].cmd) && strncmp(name, alias[a].cmd, k)==0){
+                        subst = alias[a].subst; break;
+                    }
+                }
+                if (subst) {
+                    emit_text(out, subst, strlen(subst));
+                } else {
+                    // fallback: imprime literal com a barra
+                    emit_text(out, "\\", 1);
+                    emit_text(out, name, k);
+                }
                 src->i = j;
                 tstart = src->s + src->i;
             }

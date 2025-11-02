@@ -171,28 +171,71 @@ static void measure_node(Node *n){
     }
 }
 
+// mede uma sequencia (somatorio de larguras; define alturas dos nos)
+static void measure_seq(Node *seq){
+    for (Node *p = seq; p; p = p->next) {
+        measure_node(p);
+    }
+}
+
 // ---- ADICIONE ESTES 2 PROTÓTIPOS AQUI ----
 static void draw_seq(Node *seq, int x, int y);
 static void draw_one(Node *p, int x, int y);
 // ------------------------------------------
 
-
-static void measure_seq(Node *seq){
-    for (Node *p = seq; p; p = p->next) measure_node(p);
-}
-
-static void seq_stats(Node *s, int *w, int *hmax){
-    int ww = 0, hh = 0;
-    for (Node *p = s; p; p = p->next) {
-        ww += p->w;
-        if (p->h > hh) hh = p->h;
-    }
-    if (w) *w = ww;
-    if (hmax) *hmax = hh;
-}
-
-// Flag de contexto: estamos dentro de uma fração?
+// Flag de contexto: estamos dentro de uma fracao?
 static int g_in_frac = 0;
+
+// Largura util (margens iguais as do main)
+static int g_left  = 8;
+static int g_right = 312;
+
+// Quebra e desenha um texto longo respeitando a largura disponivel da linha.
+// Atualiza x,y,lineH conforme quebra linhas.
+static void draw_text_wrap(const char *s, int *x, int *y, int *lineH){
+    while (*s) {
+        int avail = g_right - *x;
+        if (avail <= 0) {
+            // nova linha
+            *x = g_left;
+            *y += *lineH + LEADING;
+            *lineH = text_h();
+            avail = g_right - *x;
+        }
+        int fullw = gfx_GetStringWidth(s);
+        if (fullw <= avail) {
+            // cabe inteiro
+            gfx_PrintStringXY(s, *x, *y);
+            *x += fullw;
+            return;
+        }
+        // procura o ultimo espaco que caiba
+        int i = 0, last_space = -1, wacc = 0;
+        while (s[i]) {
+            int cw = gfx_GetCharWidth(s[i]);
+            if (wacc + cw > avail) break;
+            if (s[i] == ' ') last_space = i;
+            wacc += cw; i++;
+        }
+        int cut = (last_space >= 0) ? last_space : i; // hard-break se nao houver espaco
+        if (cut <= 0) cut = 1; // garante progresso
+        // desenha o trecho [0..cut)
+        char *chunk = (char*)malloc((size_t)cut + 1);
+        memcpy(chunk, s, (size_t)cut);
+        chunk[cut] = 0;
+        gfx_PrintStringXY(chunk, *x, *y);
+        free(chunk);
+        // quebra de linha logo apos o trecho
+        *x = g_left;
+        *y += *lineH + LEADING;
+        *lineH = text_h();
+        // avanca o ponteiro do texto (pula um espaco se for o caso)
+        s += cut;
+        if (*s == ' ') s++;
+    }
+}
+
+/* ---------------- Desenho ---------------- */
 
 static void draw_one(Node *p, int x, int y){
     if (!p) return;
@@ -251,11 +294,6 @@ static void draw_one(Node *p, int x, int y){
 
 static void draw_seq(Node *seq, int x, int y){
     for (Node *p = seq; p; p = p->next) {
-        // Pula nós totalmente acima da janela
-        if (y + p->h < 0) { 
-            x += p->w;
-            continue;
-        }
         // Para se já passamos do fim da tela
         if (y > 240) break;
 
@@ -347,40 +385,61 @@ int main(void){
         gfx_FillScreen(255);
         gfx_SetColor(0);          // garante preto p/ a barra da fracao
 
+        g_left = left; g_right = right;
         int x = left, y = 24 - scroll;   // “respiro” no topo
         int lineH = text_h();            // altura atual da linha (dinâmica)
 
-        for (Node *p = doc; p; p = p->next) {
+        Node *p = doc;
+        while (p) {
             if (p->tag == TAG_NL || p->tag == TAG_PAR) {
                 x = left;
-                y += lineH + LEADING + (p->tag == TAG_PAR ? text_h() : 0); // PAR: linha extra
+                y += lineH + LEADING + (p->tag == TAG_PAR ? text_h() : 0);
                 lineH = text_h();
+                p = p->next;
                 continue;
             }
 
-            // quebra de linha automática
-            if (x + p->w > right) {
+            // --- NOVO: se a linha atual esta inteira acima do topo, pula ela ---
+            if (y < 0) {
+                // Consome-nos ate o fim da linha (NL/PAR) sem desenhar
+                while (p && p->tag != TAG_NL && p->tag != TAG_PAR) {
+                    // ainda atualiza o lineH para subir corretamente
+                    if (p->h > lineH) lineH = p->h;
+                    p = p->next;
+                }
+                // aplica a quebra de linha uma unica vez
+                x = left;
+                y += lineH + LEADING;
+                lineH = text_h();
+                // se chegou num PAR, adiciona a linha extra e avanca esse token
+                if (p && p->tag == TAG_PAR) {
+                    y += text_h();
+                }
+                // avanca o token NL/PAR (se havia) e segue
+                if (p) p = p->next;
+                continue;
+            }
+            // -------------------------------------------------------------------
+
+            // quebra de linha automatica para itens nao-TEXT
+            if (p->tag != TAG_TEXT && x + p->w > right) {
                 x = left;
                 y += lineH + LEADING;
                 lineH = text_h();
             }
 
-            // --- CLIPPING POR LINHA ---
-            if (y + lineH <= 0) {              // linha inteira acima da tela
-                // só avança o x, sem desenhar
-                x += p->w;
+            if (y >= 240) break; // abaixo da tela: pare
+
+            // desenha; TAG_TEXT tem wrap interno
+            if (p->tag == TAG_TEXT) {
+                draw_text_wrap(p->text, &x, &y, &lineH);
+            } else {
+                draw_one(p, x, y);
                 if (p->h > lineH) lineH = p->h;
-                continue;
+                x += p->w;
             }
-            if (y >= 240) break;               // tudo daqui pra baixo já não aparece
-            // ---------------------------
 
-            // desenha apenas ESTE nó
-            draw_one(p, x, y);
-
-            if (p->h > lineH) lineH = p->h; // altura da linha = maior item
-            x += p->w;
-
+            p = p->next;
         }
 
         gfx_SwapDraw();
