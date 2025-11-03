@@ -8,5 +8,4 @@ viewer_pages.c
 *.8xv
 *.8xp
 tools/out.bin
-build_final.bat
 /legacy
