@@ -10,4 +10,3 @@ viewer_pages.c
 tools/out.bin
 build_final.bat
 /legacy
-*.bin
