@@ -9,3 +9,4 @@ viewer_pages.c
 *.8xp
 tools/out.bin
 /legacy
+*.bin
