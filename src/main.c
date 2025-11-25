@@ -24,6 +24,48 @@ typedef uint16_t u16;
 #define TAG_PAR    0x06
 #define TAG_END    0xFF
 
+// ---- caracteres especiais (>= 0x80) ----
+enum {
+    GLYPH_ALPHA = 0x80,
+    GLYPH_BETA,
+    GLYPH_GAMMA,
+    GLYPH_DELTA,
+    GLYPH_THETA,
+    GLYPH_LAMBDA,
+    GLYPH_MU,
+    GLYPH_PI,
+    GLYPH_RHO,
+    GLYPH_SIGMA,
+    GLYPH_SIGMAF,
+    GLYPH_PHI,
+    GLYPH_OMEGA,
+
+    GLYPH_a_ACUTE,
+    GLYPH_a_GRAVE,
+    GLYPH_a_TILDE,
+    GLYPH_a_CIRC,
+    GLYPH_A_ACUTE,
+    GLYPH_A_GRAVE,
+    GLYPH_A_TILDE,
+    GLYPH_A_CIRC,
+    GLYPH_e_ACUTE,
+    GLYPH_e_CIRC,
+    GLYPH_E_ACUTE,
+    GLYPH_E_CIRC,
+    GLYPH_i_ACUTE,
+    GLYPH_I_ACUTE,
+    GLYPH_o_ACUTE,
+    GLYPH_o_CIRC,
+    GLYPH_o_TILDE,
+    GLYPH_O_ACUTE,
+    GLYPH_O_CIRC,
+    GLYPH_O_TILDE,
+    GLYPH_u_ACUTE,
+    GLYPH_U_ACUTE,
+    GLYPH_c_CEDILLA,
+    GLYPH_C_CEDILLA,
+};
+
 // DOC_NAME chega como token (ex.: EX1LAMB) e aqui viramos "EX1LAMB"
 #ifndef DOC_NAME
 #define DOC_NAME DOC1
@@ -54,6 +96,134 @@ struct Node {
     Node *next;      // sequência
     int w,h;         // medidas calculadas
 };
+
+/* ------------ Glifos customizados (grego + acentos) ------------ */
+
+typedef struct {
+    u8 w, h;
+    const u8 *rows;  // bits menos significativos; largura = w
+} CustomGlyph;
+
+typedef struct {
+    u8 code;
+    char base;
+    enum { ACC_ACUTE, ACC_GRAVE, ACC_TILDE, ACC_CIRC, ACC_CEDILLA } type;
+} AccentGlyph;
+
+static const u8 gl_alpha[]  = {0x1C,0x02,0x1E,0x22,0x22,0x22,0x3E};
+static const u8 gl_beta[]   = {0x3C,0x22,0x3C,0x22,0x22,0x22,0x3C};
+static const u8 gl_gamma[]  = {0x3E,0x20,0x20,0x20,0x20,0x20,0x20};
+static const u8 gl_delta[]  = {0x0C,0x12,0x21,0x21,0x21,0x12,0x0C};
+static const u8 gl_theta[]  = {0x1E,0x21,0x21,0x1E,0x21,0x21,0x1E};
+static const u8 gl_lambda[] = {0x08,0x10,0x10,0x28,0x24,0x24,0x3E};
+static const u8 gl_mu[]     = {0x21,0x33,0x33,0x2D,0x2D,0x21,0x21};
+static const u8 gl_pi[]     = {0x3F,0x24,0x24,0x24,0x24,0x24,0x24};
+static const u8 gl_rho[]    = {0x3C,0x22,0x22,0x3C,0x20,0x20,0x20};
+static const u8 gl_sigma[]  = {0x3F,0x01,0x02,0x04,0x08,0x10,0x3F};
+static const u8 gl_sigmaf[] = {0x1E,0x20,0x20,0x1C,0x02,0x02,0x3C};
+static const u8 gl_phi[]    = {0x1E,0x2D,0x2D,0x3F,0x2D,0x2D,0x1E};
+static const u8 gl_omega[]  = {0x1E,0x21,0x21,0x21,0x21,0x12,0x33};
+
+static const struct { u8 code; CustomGlyph g; } g_custom_table[] = {
+    { GLYPH_ALPHA,  {6,7, gl_alpha  } },
+    { GLYPH_BETA,   {6,7, gl_beta   } },
+    { GLYPH_GAMMA,  {6,7, gl_gamma  } },
+    { GLYPH_DELTA,  {6,7, gl_delta  } },
+    { GLYPH_THETA,  {6,7, gl_theta  } },
+    { GLYPH_LAMBDA, {6,7, gl_lambda } },
+    { GLYPH_MU,     {6,7, gl_mu     } },
+    { GLYPH_PI,     {6,7, gl_pi     } },
+    { GLYPH_RHO,    {6,7, gl_rho    } },
+    { GLYPH_SIGMA,  {6,7, gl_sigma  } },
+    { GLYPH_SIGMAF, {6,7, gl_sigmaf } },
+    { GLYPH_PHI,    {6,7, gl_phi    } },
+    { GLYPH_OMEGA,  {6,7, gl_omega  } },
+};
+
+static const AccentGlyph g_accents[] = {
+    { GLYPH_a_ACUTE,   'a', ACC_ACUTE   },
+    { GLYPH_a_GRAVE,   'a', ACC_GRAVE   },
+    { GLYPH_a_TILDE,   'a', ACC_TILDE   },
+    { GLYPH_a_CIRC,    'a', ACC_CIRC    },
+    { GLYPH_A_ACUTE,   'A', ACC_ACUTE   },
+    { GLYPH_A_GRAVE,   'A', ACC_GRAVE   },
+    { GLYPH_A_TILDE,   'A', ACC_TILDE   },
+    { GLYPH_A_CIRC,    'A', ACC_CIRC    },
+    { GLYPH_e_ACUTE,   'e', ACC_ACUTE   },
+    { GLYPH_e_CIRC,    'e', ACC_CIRC    },
+    { GLYPH_E_ACUTE,   'E', ACC_ACUTE   },
+    { GLYPH_E_CIRC,    'E', ACC_CIRC    },
+    { GLYPH_i_ACUTE,   'i', ACC_ACUTE   },
+    { GLYPH_I_ACUTE,   'I', ACC_ACUTE   },
+    { GLYPH_o_ACUTE,   'o', ACC_ACUTE   },
+    { GLYPH_o_CIRC,    'o', ACC_CIRC    },
+    { GLYPH_o_TILDE,   'o', ACC_TILDE   },
+    { GLYPH_O_ACUTE,   'O', ACC_ACUTE   },
+    { GLYPH_O_CIRC,    'O', ACC_CIRC    },
+    { GLYPH_O_TILDE,   'O', ACC_TILDE   },
+    { GLYPH_u_ACUTE,   'u', ACC_ACUTE   },
+    { GLYPH_U_ACUTE,   'U', ACC_ACUTE   },
+    { GLYPH_c_CEDILLA, 'c', ACC_CEDILLA },
+    { GLYPH_C_CEDILLA, 'C', ACC_CEDILLA },
+};
+
+static const CustomGlyph* find_custom(u8 code){
+    for (size_t i=0;i<sizeof(g_custom_table)/sizeof(g_custom_table[0]);++i){
+        if (g_custom_table[i].code == code) return &g_custom_table[i].g;
+    }
+    return NULL;
+}
+
+static const AccentGlyph* find_accent(u8 code){
+    for (size_t i=0;i<sizeof(g_accents)/sizeof(g_accents[0]);++i){
+        if (g_accents[i].code == code) return &g_accents[i];
+    }
+    return NULL;
+}
+
+static void draw_custom(const CustomGlyph *g, int x, int y){
+    for (u8 r=0; r<g->h; ++r){
+        u8 row = g->rows[r];
+        for (u8 c=0; c<g->w; ++c){
+            if (row & (1 << (g->w - 1 - c))) gfx_SetPixel(x + c, y + r);
+        }
+    }
+}
+
+static void draw_accent(const AccentGlyph *a, int x, int y){
+    int w = gfx_GetCharWidth(a->base);
+    switch (a->type) {
+        case ACC_ACUTE:
+            gfx_SetPixel(x + w - 3, y); gfx_SetPixel(x + w - 2, y); gfx_SetPixel(x + w - 2, y + 1);
+            break;
+        case ACC_GRAVE:
+            gfx_SetPixel(x + 1, y); gfx_SetPixel(x + 2, y); gfx_SetPixel(x + 1, y + 1);
+            break;
+        case ACC_TILDE:
+            gfx_SetPixel(x + 1, y + 1); gfx_SetPixel(x + 2, y); gfx_SetPixel(x + 3, y + 1); gfx_SetPixel(x + 4, y);
+            break;
+        case ACC_CIRC:
+            gfx_SetPixel(x + w/2, y); gfx_SetPixel(x + w/2 - 1, y + 1); gfx_SetPixel(x + w/2 + 1, y + 1);
+            break;
+        case ACC_CEDILLA:
+            gfx_SetPixel(x + 2, y + 7); gfx_SetPixel(x + 2, y + 6); gfx_SetPixel(x + 3, y + 7);
+            break;
+    }
+}
+
+static int glyph_width(u8 c){
+    if (c >= 32 && c <= 126) return gfx_GetCharWidth(c);
+    const AccentGlyph *a = find_accent(c); if (a) return gfx_GetCharWidth(a->base);
+    const CustomGlyph *g = find_custom(c); if (g) return g->w;
+    return gfx_GetCharWidth('?');
+}
+
+static void draw_glyph(u8 c, int x, int y){
+    if (c >= 32 && c <= 126) { gfx_PrintCharXY(c, x, y); return; }
+    const AccentGlyph *a = find_accent(c); if (a) { gfx_PrintCharXY(a->base, x, y); draw_accent(a, x, y); return; }
+    const CustomGlyph *g = find_custom(c); if (g) { draw_custom(g, x, y); return; }
+    gfx_PrintCharXY('?', x, y);
+}
 
 /* ------------ Parser: Stream -> Node (com next) --------------- */
 
@@ -110,7 +280,11 @@ static Node* parse_seq(Stream *s, size_t lim){
 /* --------------- Medidas e Desenho ---------------- */
 
 static inline int text_h(void){ return 8; }
-static inline int text_w(const char *s){ return gfx_GetStringWidth(s); }
+static inline int text_w(const char *s){
+    int w = 0;
+    while (*s) w += glyph_width((u8)*s++);
+    return w;
+}
 
 // mede uma sequência inline (somatório de larguras; altura = máx)
 static void measure_seq(Node *seq);
@@ -194,42 +368,35 @@ static int g_right = 312;
 // Atualiza x,y,lineH conforme quebra linhas.
 static void draw_text_wrap(const char *s, int *x, int *y, int *lineH){
     while (*s) {
+        if (*lineH < text_h()) *lineH = text_h();
         int avail = g_right - *x;
         if (avail <= 0) {
-            // nova linha
             *x = g_left;
             *y += *lineH + LEADING;
             *lineH = text_h();
             avail = g_right - *x;
         }
-        int fullw = gfx_GetStringWidth(s);
-        if (fullw <= avail) {
-            // cabe inteiro
-            gfx_PrintStringXY(s, *x, *y);
-            *x += fullw;
-            return;
-        }
-        // procura o ultimo espaco que caiba
+
         int i = 0, last_space = -1, wacc = 0;
         while (s[i]) {
-            int cw = gfx_GetCharWidth(s[i]);
+            int cw = glyph_width((u8)s[i]);
             if (wacc + cw > avail) break;
             if (s[i] == ' ') last_space = i;
             wacc += cw; i++;
         }
-        int cut = (last_space >= 0) ? last_space : i; // hard-break se nao houver espaco
-        if (cut <= 0) cut = 1; // garante progresso
-        // desenha o trecho [0..cut)
-        char *chunk = (char*)malloc((size_t)cut + 1);
-        memcpy(chunk, s, (size_t)cut);
-        chunk[cut] = 0;
-        gfx_PrintStringXY(chunk, *x, *y);
-        free(chunk);
-        // quebra de linha logo apos o trecho
+
+        int cut = (!s[i]) ? i : (last_space >= 0 ? last_space : i);
+        if (cut <= 0) cut = 1;
+
+        int draw_w = 0;
+        for (int k=0; k<cut; ++k) { draw_glyph((u8)s[k], *x + draw_w, *y); draw_w += glyph_width((u8)s[k]); }
+
+        *x += draw_w;
+        if (!s[i]) return; // terminou a string
+
         *x = g_left;
         *y += *lineH + LEADING;
         *lineH = text_h();
-        // avanca o ponteiro do texto (pula um espaco se for o caso)
         s += cut;
         if (*s == ' ') s++;
     }
