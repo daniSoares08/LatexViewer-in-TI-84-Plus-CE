@@ -2,7 +2,8 @@
 
 Overview of **how to use, build and package** the viewer + content AppVar for TI-84 Plus CE (includes CE Python).
 This README reflects the current project state: **word wrapping**, **anti-flicker** at top, sup/sub "within line",
-parameterized AppVar name and `tex2ce` converter with **ASCII sanitization + aliases**.
+parameterized AppVar name and `tex2ce` converter with **ASCII sanitization + aliases**, plus **Greek letters and
+Portuguese accents rendered via custom glyphs**.
 
 ---
 
