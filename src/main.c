@@ -6,9 +6,12 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <fontlibc.h>
 
 typedef uint8_t  u8;
 typedef uint16_t u16;
+
+static fontlib_font_t *g_font = NULL;
 
 #define LEADING    3   // espaço extra entre linhas
 #define SUP_DOWN   1   // quanto o sup desce DENTRO da fração
@@ -108,9 +111,15 @@ static Node* parse_seq(Stream *s, size_t lim){
 }
 
 /* --------------- Medidas e Desenho ---------------- */
+static inline int text_h(void){
+    if (!g_font) return 8;
+    // altura útil = height + espaço abaixo
+    return g_font->height + g_font->space_below;
+}
 
-static inline int text_h(void){ return 8; }
-static inline int text_w(const char *s){ return gfx_GetStringWidth(s); }
+static inline int text_w(const char *s){
+    return fontlib_GetStringWidth(s);
+}
 
 // mede uma sequência inline (somatório de larguras; altura = máx)
 static void measure_seq(Node *seq);
@@ -241,7 +250,8 @@ static void draw_one(Node *p, int x, int y){
     if (!p) return;
 
     if (p->tag == TAG_TEXT) {
-        gfx_PrintStringXY(p->text, x, y);     // y = topo da linha
+        fontlib_SetCursorPosition(x, y);
+        fontlib_DrawString(p->text);
         return;
     }
 
@@ -323,16 +333,42 @@ static Node* load_doc(void){
     return doc;
 }
 
+static int init_os_font(void){
+    // Pega a primeira fonte dentro do appvar OSLFONT
+    g_font = fontlib_GetFontByIndex("OSLFONT", 0);
+    if (!g_font) {
+        // Se não achou, avisa usando a fonte padrão do graphx
+        gfx_FillScreen(255);
+        gfx_SetTextFGColor(0);
+        gfx_PrintStringXY("OSLFONT.8xv nao encontrado.", 8, 8);
+        gfx_PrintStringXY("Envie OSLFONT.8xv p/ a calculadora.", 8, 24);
+        gfx_PrintStringXY("Depois rode o programa de novo.", 8, 40);
+        gfx_SwapDraw();
+        while (1) {
+            kb_Scan();
+            if (kb_On) return 0;
+        }
+    }
+
+    fontlib_SetFont(g_font, 0);           // seleciona a fonte
+    fontlib_SetForegroundColor(0);        // texto preto
+    fontlib_SetBackgroundColor(255);      // fundo branco
+    fontlib_SetTransparency(true);        // fundo transparente
+    // Se quiser, pode limitar uma janela de texto:
+    // fontlib_SetWindow(0, 0, 320, 240);
+
+    return 1;
+}
+
 /* ---------------------- App ---------------------- */
 int main(void){
     gfx_Begin();
     gfx_SetDrawBuffer();
-    gfx_SetColor(0);                       // cor de desenho (linhas/retângulos)
+    gfx_SetColor(0);
     gfx_SetTextFGColor(0);
     gfx_SetTextBGColor(255);
     gfx_SetTextTransparentColor(255);
 
-    // ON instantâneo
     kb_EnableOnLatch();
 
     Node *doc = load_doc();
@@ -350,12 +386,19 @@ int main(void){
         return 0;
     }
 
-    // mede uma vez (precisamos das larguras/alturas)
+    // --- NOVO: inicializa fonte OS antes de medir texto ---
+    if (!init_os_font()) {
+        kb_ClearOnLatch();
+        kb_DisableOnLatch();
+        gfx_End();
+        return 0;
+    }
+
+    // mede as larguras/alturas usando FontLib (text_w / text_h)
     measure_seq(doc);
+
     uint8_t prev7 = 0;
-    int warmup = 2; // ignora as teclas nos 2 primeiros frames
-
-
+    int warmup = 2;
     int scroll = 0;
     const int left  = 8;
     const int right = 312;   // 320 - 8 de margem de cada lado
@@ -432,7 +475,20 @@ int main(void){
 
             // desenha; TAG_TEXT tem wrap interno
             if (p->tag == TAG_TEXT) {
-                draw_text_wrap(p->text, &x, &y, &lineH);
+                int w = fontlib_GetStringWidth(p->text);
+
+                // Se não couber na linha, quebra ANTES do texto todo
+                if (x + w > right) {
+                    x = left;
+                    y += lineH + LEADING;
+                    lineH = text_h();
+                }
+
+                fontlib_SetCursorPosition(x, y);
+                fontlib_DrawString(p->text);
+                x += w;
+
+                if (text_h() > lineH) lineH = text_h();
             } else {
                 draw_one(p, x, y);
                 if (p->h > lineH) lineH = p->h;

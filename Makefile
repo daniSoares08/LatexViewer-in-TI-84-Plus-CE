@@ -9,6 +9,6 @@ SRC := src/main.c
 
 # Flags e libs
 CFLAGS  := -Wall -Wextra -Oz
-LIBS    := -lgraphx -lkeypadc -lfileioc -ltice -lm
+LIBS    := -lgraphx -lkeypadc -lfileioc -ltice -lm -graphx -fontlibc -fileioc -keypadc
 
 include $(shell cedev-config --makefile)
